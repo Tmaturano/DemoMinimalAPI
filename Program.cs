@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Microsoft.OpenApi.Models;
 using MiniValidation;
 using NetDevPack.Identity;
 using NetDevPack.Identity.Jwt;
@@ -16,7 +17,7 @@ using System.Reflection;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+
 builder.Services.AddAutoMapper(Assembly.GetAssembly(typeof(AutoMapperConfig)));
 
 builder.Services.AddDbContext<MinimalContextDb>(options =>
@@ -33,6 +34,42 @@ builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("DeleteSupplier",
         policy => policy.RequireClaim("DeleteSupplier"));
+});
+
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "Minimal API Sample",
+        Description = "Developed by Thiago Maturana",
+        Contact = new OpenApiContact { Name = "Thiago Maturana", Email = "test@test.com" },
+        License = new OpenApiLicense { Name = "MIT", Url = new Uri("https://opensource.org/licenses/MIT") }
+    });
+
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Description = "Enter the JWT token like this: Bearer {your token}",
+        Name = "Authorization",
+        Scheme = "Bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.ApiKey
+    });
+
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            new string[] {}
+        }
+    });
 });
 
 var app = builder.Build();
