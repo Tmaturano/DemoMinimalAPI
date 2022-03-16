@@ -3,6 +3,7 @@ using DemoMinimalAPI.AutoMapper;
 using DemoMinimalAPI.Data;
 using DemoMinimalAPI.DTOs;
 using DemoMinimalAPI.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -28,6 +29,12 @@ builder.Services.AddIdentityEntityFrameworkContextConfiguration(options =>
 builder.Services.AddIdentityConfiguration();
 builder.Services.AddJwtConfiguration(builder.Configuration, "AppSettings");
 
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("DeleteSupplier",
+        policy => policy.RequireClaim("DeleteSupplier"));
+});
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -39,8 +46,7 @@ if (app.Environment.IsDevelopment())
 app.UseAuthConfiguration();
 app.UseHttpsRedirection();
 
-
-app.MapPost("/register", async (
+app.MapPost("/register", [AllowAnonymous] async (
     SignInManager<IdentityUser> signInManager,
     UserManager<IdentityUser> userManager,
     IOptions<AppJwtSettings> appJwtSettings,
@@ -79,7 +85,8 @@ app.MapPost("/register", async (
   .WithName("RegisterUser")
   .WithTags("User");
 
-app.MapPost("/login", async (
+
+app.MapPost("/login", [AllowAnonymous] async (
     SignInManager<IdentityUser> signInManager,
     UserManager<IdentityUser> userManager,
     IOptions<AppJwtSettings> appJwtSettings,
@@ -116,14 +123,14 @@ app.MapPost("/login", async (
   .WithTags("User");
 
 
-app.MapGet("/suppliers", async (MinimalContextDb context) =>
+app.MapGet("/suppliers", [AllowAnonymous] async (MinimalContextDb context) =>
     await context.Suppliers.ToListAsync())
   .Produces<IEnumerable<Supplier>>(StatusCodes.Status200OK)
   .Produces<IEnumerable<Supplier>>(StatusCodes.Status404NotFound)
   .WithName("GetSuppliers")
   .WithTags("Supplier");
 
-app.MapGet("/supplier/{id}", async (Guid id, MinimalContextDb context) =>
+app.MapGet("/supplier/{id}", [AllowAnonymous] async (Guid id, MinimalContextDb context) =>
     await context.Suppliers.FindAsync(id)
         is Supplier supplier
         ? Results.Ok(supplier)
@@ -133,7 +140,7 @@ app.MapGet("/supplier/{id}", async (Guid id, MinimalContextDb context) =>
     .WithName("GetSupplierById")
     .WithTags("Supplier");
 
-app.MapPost("/supplier", async (MinimalContextDb context, SupplierInputDto supplierInputDto, IMapper mapper) =>
+app.MapPost("/supplier", [Authorize] async (MinimalContextDb context, SupplierInputDto supplierInputDto, IMapper mapper) =>
 {
     if (!MiniValidator.TryValidate(supplierInputDto, out var errors))
         return Results.ValidationProblem(errors);
@@ -152,7 +159,7 @@ app.MapPost("/supplier", async (MinimalContextDb context, SupplierInputDto suppl
   .WithTags("Supplier");
 
 
-app.MapPut("/supplier/{id}", async (MinimalContextDb context, Guid id, SupplierInputDto supplierInputDto, IMapper mapper) =>
+app.MapPut("/supplier/{id}", [Authorize] async (MinimalContextDb context, Guid id, SupplierInputDto supplierInputDto, IMapper mapper) =>
 {
     var supplierFromDb = await context.Suppliers.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id);
     if (supplierFromDb is null)
@@ -176,7 +183,7 @@ app.MapPut("/supplier/{id}", async (MinimalContextDb context, Guid id, SupplierI
   .WithName("UpdateSupplier")
   .WithTags("Supplier");
 
-app.MapDelete("/supplier/{id}", async (MinimalContextDb context, Guid id, IMapper mapper) =>
+app.MapDelete("/supplier/{id}", [Authorize] async (MinimalContextDb context, Guid id, IMapper mapper) =>
 {
     var supplier = await context.Suppliers.FindAsync(id);
     if (supplier is null)
@@ -192,6 +199,7 @@ app.MapDelete("/supplier/{id}", async (MinimalContextDb context, Guid id, IMappe
   .Produces<Supplier>(StatusCodes.Status204NoContent)
   .Produces<Supplier>(StatusCodes.Status400BadRequest)
   .Produces<Supplier>(StatusCodes.Status404NotFound)
+  .RequireAuthorization("DeleteSupplier")
   .WithName("DeleteSupplier")
   .WithTags("Supplier");
 
