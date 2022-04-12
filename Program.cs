@@ -13,6 +13,7 @@ using NetDevPack.Identity;
 using NetDevPack.Identity.Jwt;
 using NetDevPack.Identity.Model;
 using System.Reflection;
+using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,6 +36,12 @@ builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("DeleteSupplier",
         policy => policy.RequireClaim("DeleteSupplier"));
+
+    options.AddPolicy("UpdateSupplierPolicy",
+        policy => policy.RequireClaim("UpdateSupplier"));
+
+    options.AddPolicy("CanAddClaim",
+        policy => policy.RequireClaim("AddClaim"));
 });
 
 builder.Services.AddSwaggerGen(c =>
@@ -172,6 +179,46 @@ void MapActions(WebApplication app)
       .WithName("LoginUser")
       .WithTags("User");
 
+    app.MapPost("/addClaimToUser", [Authorize] async (
+       SignInManager<IdentityUser> signInManager,
+       UserManager<IdentityUser> userManager,
+       ClaimsPrincipal loggedUser,
+       IOptions <AppJwtSettings> appJwtSettings,
+       string claimType,
+       string claimName,
+       string userId) =>
+    {
+        var user = await userManager.FindByIdAsync(userId);
+        if (user is null)
+            return Results.BadRequest("User was not found");
+
+        var userClaims = await userManager.GetClaimsAsync(user);
+        if (userClaims.Any(x => x.Type == claimType))
+            return Results.BadRequest("User already has this claim");
+               
+        
+        var result = await userManager.AddClaimAsync(user, new Claim(claimType, claimName));
+
+        if (!result.Succeeded)
+            return Results.BadRequest("Could not associate the given claim to the user");
+
+        var jwt = new JwtBuilder()
+                    .WithUserManager(userManager)
+                    .WithJwtSettings(appJwtSettings.Value)
+                    .WithEmail(user.Email)
+                    .WithJwtClaims()
+                    .WithUserClaims()
+                    .WithUserRoles()
+                    .BuildUserResponse();
+
+        return Results.Ok(jwt);
+    }).ProducesValidationProblem()
+     .Produces(StatusCodes.Status200OK)
+     .Produces(StatusCodes.Status400BadRequest)
+     .RequireAuthorization("CanAddClaim")
+     .WithName("AddClaimToUser")
+     .WithTags("User");
+
 
     app.MapGet("/suppliers", [AllowAnonymous] async (MinimalContextDb context) =>
         await context.Suppliers.ToListAsync())
@@ -230,6 +277,7 @@ void MapActions(WebApplication app)
       .Produces<Supplier>(StatusCodes.Status204NoContent)
       .Produces<Supplier>(StatusCodes.Status400BadRequest)
       .Produces<Supplier>(StatusCodes.Status404NotFound)
+      .RequireAuthorization("UpdateSupplierPolicy")
       .WithName("UpdateSupplier")
       .WithTags("Supplier");
 
